@@ -1,1 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>🌸 The Graceful Blog Machine</title>
+  <style>
+    body { font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; line-height:1.55; color:#333; padding:24px; max-width:900px; margin:auto; }
+    h1,h2,h3 { color:#330033; }
+    code,kbd { background:#f6f6f7; padding:2px 4px; border-radius:4px; }
+    .pill { display:inline-block; font-size:12px; background:#E5E6E5; color:#330033; padding:2px 8px; border-radius:999px; margin-left:6px; }
+    ul { margin:0 0 1em 1.2em; }
+    .grid { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:10px 24px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .note { color:#666; font-size:13px; }
+    hr { border:none; border-top:1px solid #eee; margin:20px 0; }
+  </style>
+</head>
+<body>
+  <h1>🌸 The Graceful Blog Machine</h1>
+  <p>Automated healthcare blog production directly inside Google Sheets.<br>
+     Powered by <strong>AgencyAnalytics</strong> (keyword insights), <strong>Google Gemini</strong> (AI writing), and <strong>Google Drive/Docs</strong> (outputs).<br>
+     Built with ❤️ by Suz.</p>
+
+  <hr>
+
+  <h2>🎯 Overview</h2>
+  <ol>
+    <li><strong>Pull Keywords</strong> → Fetch the 10 worst-performing keywords from AgencyAnalytics.</li>
+    <li><strong>Generate Topics</strong> → Topics use a short title that equals the <em>Primary</em> keyword.</li>
+    <li><strong>Generate Outlines</strong> → Structured HTML outlines with H2/H3s and bullets; saved into a Google Doc “code block.”</li>
+    <li><strong>Fill Drafts</strong> → Expand outlines into ~1500-word drafts; keep the code block pattern.</li>
+    <li><strong>Copyedit Finals</strong> → Final polish with a single “In short,” block + <em>inline</em> CTA links.</li>
+  </ol>
+  <p>Use the custom menu or the sidebar to run steps individually or via <strong>Full Blown Hoppification</strong> (now batched).</p>
+
+  <h2>🗂 Sheet Layout</h2>
+  <p><span class="pill">Sheet name</span> <code>The Hoppywriter</code></p>
+  <div class="grid mono">
+    <div>A: Client Code</div><div>B: Client Name</div>
+    <div>C: Campaign ID</div><div>D: Blogs per month</div>
+    <div>E: Approval Process</div><div>F: Editor (Wrike user ID[s])</div>
+    <div>G: CTA Phone Number</div><div>H: CTA Link (Contact URL)</div>
+    <div>I: Client-Specific Instructions</div><div>J: Blog URL (freeform)</div>
+    <div>K: Wrike Folder for Tasks</div><div>L–U: KW1..KW10 (auto-populated)</div>
+  </div>
+  <p>Then 8 Blog Blocks × 4 columns each: <em>Primary Keyword</em>, <em>Secondary Keywords</em>, <em>Topic</em>, <em>Link to Doc</em>.</p>
+  <p class="note">Topic cells are written as a short title equal to the Primary keyword (title-cased).</p>
+
+  <h2>🔄 Workflow</h2>
+  <h3>1) Pull Keywords</h3>
+  <ul>
+    <li>Calls AgencyAnalytics via APIRequest proxy (<code>provider: "agency-analytics-v2"</code>, no <code>connector_type</code>).</li>
+    <li>Populates <code>KW1..KW10</code> as the worst deltas (positive rank increases) over the 30-day lookback.</li>
+  </ul>
+
+  <h3>2) Generate Topics</h3>
+  <ul>
+    <li>Gemini proposes primaries/secondaries from KW1–KW10.</li>
+    <li><strong>We enforce Topic = Primary keyword</strong> (title-cased) to keep titles short and focused.</li>
+  </ul>
+
+  <h3>3) Generate Outlines</h3>
+  <ul>
+    <li>HTML outline uses semantic tags only (<code>&lt;h2&gt;</code>, <code>&lt;h3&gt;</code>, <code>&lt;p&gt;</code>, <code>&lt;ul&gt;/&lt;ol&gt;</code>).</li>
+    <li>Stored in a single Google Doc per blog: the raw HTML goes in a shaded monospace “code block” cell.</li>
+    <li><strong>CTA is enforced</strong> to include <code>tel:</code> and Contact link inline.</li>
+  </ul>
+
+  <h3>4) Fill Drafts</h3>
+  <ul>
+    <li>Expands the outline; preserves structure and the “In short,” lead.</li>
+    <li>Enforces inline CTA links and a simple <em>Sources</em> section with reputable URLs.</li>
+    <li>Writes back into the same Doc.</li>
+  </ul>
+
+  <h3>5) Copyedit Finals</h3>
+  <ul>
+    <li>Grammar, clarity, and tone cleanup; single “In short,” block maintained.</li>
+    <li>CTA links are re-checked and added if missing.</li>
+  </ul>
+
+  <h2>🧰 Sidebar & Menu</h2>
+  <ul>
+    <li><strong>Write headers</strong>: builds the two-row header with bands and freezes them.</li>
+    <li><strong>Full Blown Hoppification (batched)</strong>: runs all stages across all rows in batches of 5.</li>
+    <li>Buttons for each step: All Rows / Selected Rows.</li>
+    <li><strong>Wrike</strong>: Send Topics → Tasks (uses approval blueprints and assigns to Editor IDs).</li>
+  </ul>
+
+  <h2>⚙️ Setup</h2>
+  <ol>
+    <li>Set Script Properties:
+      <ul>
+        <li><code>aa_api_key</code> (AgencyAnalytics)</li>
+        <li><code>gemini_api_key</code> (Google Generative Language API)</li>
+        <li><code>wrike_access_token</code> (Wrike API v4)</li>
+      </ul>
+    </li>
+    <li>Paste <strong>raw Wrike user ID(s)</strong> into the <strong>Editor</strong> column (F). Comma-separated works.</li>
+    <li>Enter <strong>CTA Phone</strong> (G) and <strong>CTA Link</strong> (H). These become inline CTA links (<code>tel:</code> and Contact).</li>
+    <li>Optionally add <strong>Client-Specific Instructions</strong> (I) per row; global guidance lives inside the script.</li>
+  </ol>
+
+  <h2>✅ Notes & Guardrails</h2>
+  <ul>
+    <li>Link writing to the sheet is hardened: tries Rich Text, verifies, falls back to <code>=HYPERLINK()</code>.</li>
+    <li>We auto-extend columns to the far-right blog area to avoid silent write failures.</li>
+    <li>Wrike task titles: <code>{M MONTH YYYY} * {Client Code} "Topic"</code>. Description patch is optional.</li>
+    <li>All HTML is stored in a single Doc that updates from Outline → Draft → Final.</li>
+  </ul>
+
+  <h2>🚧 Known Limits</h2>
+  <ul>
+    <li>Apps Script exec time ~6 minutes per run; batching mitigates this.</li>
+    <li>AA endpoint is strict about payload shape; respect <code>provider</code> and omit <code>connector_type</code>.</li>
+    <li>Gemini can occasionally return malformed HTML; post-processors normalize headers, CTA, and Sources.</li>
+  </ul>
+
+  <h2>🎨 Brand Colors</h2>
+  <p><code>#FFFFFF #DB499A #5C5A5B #E5E6E5 #CD6C73 #936160 #AAB0EC #045951 #330033 #FFC50D</code></p>
+
+  <p class="note">Made with ♡ by Suz</p>
+</body>
+</html>
 
