@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Graceful</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet" />
+  <style>
+    :root{ --white:#FFFFFF; --pink:#DB499A; --charcoal:#5C5A5B; --mist:#AAB0EC; --green:#045951; --egg:#E5E6E5; --plum:#330033; --sand:#FFC50D; }
+    html,body{ background:var(--white); color:var(--charcoal); margin:0; padding:0; font-family:Avenir,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif; font-size:14px; line-height:1.5; }
+    .header{ padding:14px 16px 8px; border-bottom:1px solid var(--egg); display:flex; align-items:center; justify-content:center; background:#fff; position:relative; }
+    .header img{ max-width:100%; height:auto; border-radius:6px; display:block; }
+    .wrap{ padding:14px 16px 80px; }
+    .card{ border:1px solid var(--egg); border-radius:12px; padding:14px; margin:12px 0; box-shadow:0 1px 2px rgba(0,0,0,0.04); background:#fff; }
+    .card h2{ margin:0 0 8px 0; font-family:"Bebas Neue",system-ui,sans-serif; letter-spacing:0.5px; font-size:22px; color:var(--plum); display:flex; align-items:center; gap:8px; }
+    .badge{ font-size:11px; padding:3px 6px; border-radius:10px; background:var(--egg); color:var(--plum); border:1px solid rgba(0,0,0,0.05); }
+    .muted{ color:#7a7a7a; font-size:12px; margin:6px 0 10px; }
+    .row{ display:flex; gap:8px; flex-wrap:wrap; }
+    button{ appearance:none; border:1px solid currentColor; background:#fff; color:var(--charcoal); padding:9px 12px; font-weight:600; cursor:pointer; border-radius:0px 0px 10px 0px; transition:background .18s, color .18s, transform .02s; }
+    button:active{ transform:translateY(0.5px); }
+    button[disabled]{ opacity:.5; cursor:not-allowed; }
+    .btn-pink{ color:var(--pink); } .btn-pink:hover{ background:var(--pink); color:#fff; }
+    .btn-mist{ color:var(--mist); } .btn-mist:hover{ background:var(--mist); color:#fff; }
+    .btn-green{ color:var(--green); } .btn-green:hover{ background:var(--green); color:#fff; }
+    .btn-sand{ color:#111; border-color:var(--sand); } .btn-sand:hover{ background:var(--sand); color:#111; }
+    .fullwidth{ width:100%; }
+    .log{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; background:#fafafa; border:1px solid var(--egg); border-radius:8px; padding:10px; height:200px; overflow:auto; white-space:pre-wrap; font-size:12px; line-height:1.4; }
+    .log-entry{ margin:2px 0; padding:1px 0; }
+    .footer{ text-align:center; padding:10px 16px 16px; color:#777; font-size:12px; }
+    .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+    .ok{ background:#26a269; } .err{ background:#c01c28; } .run{ background:#e5a50a; } .info{ background:#62a0ea; }
+    .month-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    input[type="month"]{ padding:8px; border:1px solid var(--egg); border-radius:8px; font-size:14px; }
+    select{ padding:8px; border:1px solid var(--egg); border-radius:8px; font-size:14px; max-width:100%; }
+    .blog-select-container { margin-bottom:8px; }
+    #blogSelect { width: 100%; max-width: 350px; }
+    
+    #loadingOverlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(51, 0, 51, 0.7); z-index: 9999; align-items: center; justify-content: center; }
+    #loadingOverlay.active { display: flex; }
+    .loading-container { position: relative; width: 48px; height: 48px; }
+    .spinner { width: 48px; height: 48px; border: 4px solid rgba(255, 255, 255, 0.3); border-top-color: #DB499A; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .hourglass { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; animation: flip 1.6s ease-in-out infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes flip { 0%, 100% { transform: translate(-50%, -50%) rotate(0deg); } 50% { transform: translate(-50%, -50%) rotate(180deg); } }
+    
+    .accordion { margin: 12px 0; border: 1px solid var(--egg); border-radius: 12px; overflow: hidden; background: #fff; }
+    .accordion-header { padding: 14px; cursor: pointer; background: var(--egg); display: flex; align-items: center; justify-content: space-between; font-weight: 600; transition: background 0.2s; }
+    .accordion-header:hover { background: #d8d9da; }
+    .accordion-icon { transition: transform 0.3s; font-size: 18px; color: var(--plum); }
+    .accordion.open .accordion-icon { transform: rotate(180deg); }
+    .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+    .accordion.open .accordion-content { max-height: 3000px; transition: max-height 0.5s ease-in; }
+    .accordion-inner { padding: 14px; }
+ 
+    @keyframes pulse{ 0%{ background:#fff3cd; } 100%{ background:transparent; } }
+    .log-entry.new{ animation:pulse 0.6s ease-out; }
+  </style>
+</head>
+<body>
+  <div id="loadingOverlay">
+    <div class="loading-container">
+      <div class="spinner"></div>
+      <div class="hourglass">⏳</div>
+    </div>
+  </div>
+
+  <div class="header">
+    <img src="https://hedyandhopp.com/wp-content/uploads/2025/08/Graceful-1.png" alt="Graceful Blog Machine" />
+  </div>
+
+  <div class="wrap">
+
+    <!-- Activity Log -->
+    <div class="card">
+      <h2><span class="badge">📊</span> Activity Log</h2>
+      <p class="muted">Keep an eye on what Grace is doing!</p>
+      <div id="log" class="log" aria-live="polite"></div>
+    </div>
+
+    <!-- Month picker -->
+    <div class="card">
+      <h2><span class="badge">📅</span> Target Month</h2>
+      <p class="muted">Choose the month/year for naming & Wrike tasks (e.g., "10 OCTOBER 2025").</p>
+      <div class="month-row">
+        <input id="monthSelect" type="month" />
+        <button onclick="setToCurrent()">Use current</button>
+      </div>
+    </div>
+
+    <!-- Keywords & Topics -->
+    <div class="card">
+      <h2><span class="badge">🔑</span> Keywords & Topics</h2>
+      <p class="muted">Pull worst 10 keywords from AgencyAnalytics, then generate topics.</p>
+      <div class="row">
+        <button id="btnKTAll" class="btn-pink" onclick="call('getKeywordsAndTopicsAllRows')">All rows</button>
+        <button id="btnKTSelected" class="btn-pink" onclick="call('getKeywordsAndTopicsSelectedRows')">Selected rows</button>
+      </div>
+    </div>
+
+     <!-- Wrike -->
+     <div class="card">
+      <h2><span class="badge">✅</span> Wrike Tasks</h2>
+       <p class="muted">Creates Wrike tasks via approval blueprints. Editor column should contain Wrike user IDs.</p>
+      <div class="row">
+        <button id="btnWrikeAll" class="btn-green" onclick="callWithMonth('sendToWrikeAllRows')">All rows</button>
+        <button id="btnWrikeSel" class="btn-green" onclick="callWithMonth('sendToWrikeSelectedRows')">Selected rows</button>
+      </div>
+     </div>
+
+    <!-- One-Click Hoppywrite -->
+    <div class="card">
+      <h2><span class="badge">✨</span> Hoppywrite this Row</h2>
+      <p class="muted">Generates outlines, expands into drafts, & copyedits this row in one click.</p>
+      <div class="row">
+        <button id="btnHoppywriteRow" class="btn-pink fullwidth" onclick="call('hoppywriteActiveRow')">
+          Hoppywrite this row
+        </button>
+      </div>
+    </div>
+
+    <!-- INDIVIDUAL BLOG PROCESSING -->
+    <div class="card">
+      <h2><span class="badge">🎯</span> Individual Blog Processing</h2>
+      <p class="muted">Process just one blog instead of the whole row. Select the row first, then choose blog & operation.</p>
+      <div class="blog-select-container">
+        <select id="blogSelect">
+          <option value="">Loading blogs...</option>
+        </select>
+      </div>
+      <div class="row">
+        <button id="btnBlogOutline" class="btn-mist" onclick="processBlog('outline')">Outline only</button>
+        <button id="btnBlogDraft" class="btn-mist" onclick="processBlog('draft')">Draft only</button>
+        <button id="btnBlogCopyedit" class="btn-mist" onclick="processBlog('copyedit')">Copyedit only</button>
+        <button id="btnBlogAll" class="btn-pink" onclick="processBlog('all')">All steps</button>
+      </div>
+    </div>
+
+    <!-- Report a Bug -->
+    <div class="card">
+      <h2><span class="badge">🐛</span> Report a Bug</h2>
+      <p class="muted">Something wrong? Add it to the Wrike board!</p>
+      <div class="row">
+        <button class="btn-pink" onclick="reportBug()">Report a Bug</button>
+      </div>
+    </div>
+
+    <!-- ADVANCED: Accordion -->
+    <div class="accordion" id="advancedAccordion">
+      <div class="accordion-header" onclick="toggleAccordion()">
+        <span>⚙️ Advanced Functions</span>
+        <span class="accordion-icon">▼</span>
+      </div>
+      <div class="accordion-content">
+        <div class="accordion-inner">
+
+          <!-- Setup -->
+          <div class="card" style="margin-top:0;">
+            <h2><span class="badge">1</span> Sheet Headers</h2>
+            <p class="muted">Writes two header rows (group bands + titles), merges bands, and freezes headers.</p>
+            <div class="row">
+              <button class="btn-green" onclick="call('writeSheetHeaders')">Write headers</button>
+            </div>
+          </div>
+
+          <!-- Outlines -->
+          <div class="card">
+            <h2><span class="badge">📝</span> Outlines</h2>
+            <p class="muted">Generate HTML outlines and save inside a Google Doc code block.</p>
+            <div class="row">
+              <button id="btnOutlineAll" class="btn-mist" onclick="call('generateOutlinesAllRows')">All rows</button>
+              <button id="btnOutlineSel" class="btn-mist" onclick="call('generateOutlinesSelectedRows')">Selected rows</button>
+            </div>
+          </div>
+
+          <!-- Drafts -->
+          <div class="card">
+            <h2><span class="badge">📄</span> Drafts</h2>
+            <p class="muted">Expand outline → full HTML draft; writes into the same Doc.</p>
+            <div class="row">
+              <button id="btnDraftAll" class="btn-mist" onclick="call('fillDraftsAllRows')">All rows</button>
+              <button id="btnDraftSel" class="btn-mist" onclick="call('fillDraftsSelectedRows')">Selected rows</button>
+            </div>
+          </div>
+
+          <!-- Edit -->
+          <div class="card">
+            <h2><span class="badge">📑</span> Copyedit</h2>
+            <p class="muted">Final polish; keeps a single "In short," block and enforces CTA links.</p>
+            <div class="row">
+              <button id="btnCEAll" class="btn-mist" onclick="call('copyeditAllRows')">All rows</button>
+              <button id="btnCESel" class="btn-mist" onclick="call('copyeditSelectedRows')">Selected rows</button>
+            </div>
+          </div>
+
+          <!-- Full Hoppification -->
+          <div class="card">
+            <h2><span class="badge">🚀</span> Full Blown Hoppification</h2>
+            <p class="muted">Runs all steps across all rows in <strong>batches of 5</strong> to avoid timeouts.</p>
+            <div class="row">
+              <button id="btnHoppify" class="btn-sand fullwidth" onclick="runHoppifyBatched()">Full Blown Hoppification (batched)</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">Made with ♡ by Suz</div>
+  </div>
+
+  <script>
+    const btnIds = [
+      'btnHoppify','btnHoppywriteRow',
+      'btnKTAll','btnKTSelected',
+      'btnOutlineAll','btnOutlineSel',
+      'btnDraftAll','btnDraftSel',
+      'btnCEAll','btnCESel',
+      'btnWrikeAll','btnWrikeSel',
+      'btnBlogOutline','btnBlogDraft','btnBlogCopyedit','btnBlogAll'
+    ];
+
+    let logPollInterval = null;
+    let lastLogCount = 0;
+    let isPolling = false;
+
+    function initMonthPicker(){
+      const inp = document.getElementById('monthSelect');
+      const saved = localStorage.getItem('graceful_month');
+      inp.value = saved || isoMonth(new Date());
+      inp.addEventListener('change', ()=>{
+        localStorage.setItem('graceful_month', inp.value || '');
+      });
+    }
+    
+    function setToCurrent(){
+      const inp = document.getElementById('monthSelect');
+      inp.value = isoMonth(new Date());
+      localStorage.setItem('graceful_month', inp.value);
+    }
+    
+    function isoMonth(d){
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      return `${y}-${m}`;
+    }
+
+    function toggleAccordion(){
+      const acc = document.getElementById('advancedAccordion');
+      acc.classList.toggle('open');
+    }
+
+    function reportBug() {
+      window.open('https://www.wrike.com/workspace.htm?acc=5950450#/folder/1756226877/tableV2?spaceId=1675121281&viewId=405769104', '_blank');
+    }
+
+    function disableAll(disabled){
+      btnIds.forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.disabled = disabled;
+      });
+      
+      const overlay = document.getElementById('loadingOverlay');
+      if (overlay) {
+        if (disabled) {
+          overlay.classList.add('active');
+        } else {
+          overlay.classList.remove('active');
+        }
+      }
+    }
+    
+    function logLine(msg, cls){
+      const el = document.getElementById('log');
+      if (!el) return;
+      
+      const dot = cls ? `<span class="dot ${cls}"></span>` : '';
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry new';
+      entry.innerHTML = `${dot}[${time}] ${msg}`;
+      el.insertBefore(entry, el.firstChild);
+      
+      setTimeout(() => entry.classList.remove('new'), 600);
+    }
+
+    function startLogPolling(){
+      if (isPolling) return;
+      
+      isPolling = true;
+      lastLogCount = 0;
+      
+      logPollInterval = setInterval(() => {
+        google.script.run
+          .withSuccessHandler(logs => {
+            if (!logs || !Array.isArray(logs)) return;
+            
+            const newLogs = logs.slice(lastLogCount);
+            newLogs.forEach(entry => {
+              try {
+                const levelClass = entry.level === 'ok' ? 'ok' : 
+                                  entry.level === 'warn' ? 'run' : 
+                                  entry.level === 'err' ? 'err' : 'info';
+                logLine(entry.message, levelClass);
+              } catch (e) {
+                console.error('Error rendering log:', e);
+              }
+            });
+            
+            lastLogCount = logs.length;
+          })
+          .withFailureHandler(err => {
+            if (!String(err).includes('429')) {
+              console.error('Log polling error:', err);
+            }
+          })
+          .getSidebarLogs();
+      }, 3000);
+    }
+
+    function stopLogPolling(){
+      if (logPollInterval) {
+        clearInterval(logPollInterval);
+        logPollInterval = null;
+      }
+      isPolling = false;
+    }
+
+    function call(fnName){
+      disableAll(true);
+      logLine(`Running ${fnName}…`,'run');
+      
+      startLogPolling();
+      
+      google.script.run
+        .withSuccessHandler(res=>{
+          try {
+            stopLogPolling();
+            
+            if (res && res.logs && res.logs.length > 0) {
+              res.logs.slice(lastLogCount).forEach(entry => {
+                try {
+                  const levelClass = entry.level === 'ok' ? 'ok' : 
+                                    entry.level === 'warn' ? 'run' : 
+                                    entry.level === 'err' ? 'err' : 'info';
+                  logLine(entry.message, levelClass);
+                } catch (e) {
+                  console.error('Error rendering log:', e);
+                }
+              });
+            }
+            
+            if (fnName === 'hoppywriteActiveRow' && res && res.wordCountSummary) {
+              const wc = res.wordCountSummary;
+              const pct = parseInt(wc.percentage);
+              
+              let status, statusClass;
+              if (pct >= 85) {
+                status = '✓ Excellent';
+                statusClass = 'ok';
+              } else if (pct >= 70) {
+                status = '✓ Good';
+                statusClass = 'ok';
+              } else if (pct >= 50) {
+                status = '⚠ Fair';
+                statusClass = 'run';
+              } else {
+                status = '⚠ Needs Work';
+                statusClass = 'err';
+              }
+              
+              logLine(`Word Count: ${wc.inRange}/${wc.total} in range (${pct}%) ${status}`, statusClass);
+            }
+            
+            logLine(`${fnName} ✓`, 'ok');
+            
+            if (res && res.items) {
+              logLine(`Summary: ok=${res.ok||0}, errors=${res.errors||0}, total=${res.total||0}`);
+              
+              res.items.forEach(item => {
+                try {
+                  if (item.status === 'error' && item.reason) {
+                    logLine(`Row ${item.row} ERROR: ${item.reason}`, 'err');
+                  }
+                } catch (e) {
+                  console.error('Error rendering item:', e);
+                }
+              });
+            }
+          } catch (e) {
+            console.error('Error in success handler:', e);
+            logLine('Error displaying results: ' + e.message, 'err');
+          } finally {
+            disableAll(false);
+          }
+        })
+        .withFailureHandler(err=>{
+          try {
+            stopLogPolling();
+            logLine(`${fnName} failed: ${err && err.message ? err.message : err}`,'err');
+          } catch (e) {
+            console.error('Error in failure handler:', e);
+          } finally {
+            disableAll(false);
+          }
+        })[fnName]();
+    }
+
+    function callWithMonth(fnName){
+      disableAll(true);
+      const sel = document.getElementById('monthSelect');
+      const yyyyMm = (sel && sel.value) ? sel.value.trim() : '';
+
+      logLine(`Running ${fnName}…`, 'run');
+
+      startLogPolling();
+
+      google.script.run
+        .withSuccessHandler(() => {
+          google.script.run
+            .withSuccessHandler(res=>{
+              try {
+                stopLogPolling();
+                logLine(`${fnName} ✓`, 'ok');
+                if (res && res.items) {
+                  logLine(`Summary: ok=${res.ok||0}, errors=${res.errors||0}, total=${res.total||0}`);
+                }
+              } catch (e) {
+                console.error('Error in success handler:', e);
+              } finally {
+                disableAll(false);
+              }
+            })
+            .withFailureHandler(err=>{
+              try {
+                stopLogPolling();
+                logLine(`${fnName} failed: ${err && err.message ? err.message : err}`,'err');
+              } catch (e) {
+                console.error('Error in failure handler:', e);
+              } finally {
+                disableAll(false);
+              }
+            })[fnName](yyyyMm);
+        })
+        .withFailureHandler(err=>{
+          try {
+            stopLogPolling();
+            logLine(`setSelectedMonth failed: ${err && err.message ? err.message : err}`,'err');
+          } catch (e) {
+            console.error('Error in failure handler:', e);
+          } finally {
+            disableAll(false);
+          }
+        })
+        .setSelectedMonth(yyyyMm);
+    }
+
+    function processBlog(operation) {
+      const sel = document.getElementById('blogSelect');
+      const blogIndex = parseInt(sel.value);
+      
+      if (!blogIndex || isNaN(blogIndex)) {
+        logLine('Please select a blog first', 'err');
+        return;
+      }
+      
+      disableAll(true);
+      logLine(`Processing Blog ${blogIndex} (${operation})…`, 'run');
+      startLogPolling();
+      
+      google.script.run
+        .withSuccessHandler(res => {
+          try {
+            stopLogPolling();
+            if (res && res.logs) {
+              res.logs.slice(lastLogCount).forEach(entry => {
+                const levelClass = entry.level === 'ok' ? 'ok' : 
+                                  entry.level === 'warn' ? 'run' : 
+                                  entry.level === 'err' ? 'err' : 'info';
+                logLine(entry.message, levelClass);
+              });
+            }
+            logLine(`Blog ${blogIndex} ${operation} ✓`, 'ok');
+          } catch (e) {
+            console.error('Error:', e);
+          } finally {
+            disableAll(false);
+          }
+        })
+        .withFailureHandler(err => {
+          try {
+            stopLogPolling();
+            logLine(`Blog ${blogIndex} ${operation} failed: ${err}`, 'err');
+          } catch (e) {
+            console.error('Error:', e);
+          } finally {
+            disableAll(false);
+          }
+        })
+        .processSingleBlogActiveRow(blogIndex, operation);
+    }
+
+    function loadAvailableBlogs() {
+      google.script.run
+        .withSuccessHandler(data => {
+          const sel = document.getElementById('blogSelect');
+          if (!data || !data.blogs || !data.blogs.length) {
+            sel.innerHTML = '<option value="">No blogs available</option>';
+            return;
+          }
+          
+          sel.innerHTML = '<option value="">Select a blog...</option>';
+          data.blogs.forEach(blog => {
+            const opt = document.createElement('option');
+            opt.value = blog.index;
+            opt.textContent = `Blog ${blog.index}: ${blog.title}`;
+            sel.appendChild(opt);
+          });
+        })
+        .withFailureHandler(err => {
+          const sel = document.getElementById('blogSelect');
+          sel.innerHTML = '<option value="">Error loading blogs</option>';
+          console.error('Error loading blogs:', err);
+        })
+        .getAvailableBlogsForActiveRow();
+    }
+
+    function runHoppifyBatched(batchSize = 5){
+      disableAll(true);
+      logLine(`Planning batches of ${batchSize}…`,'run');
+      
+      startLogPolling();
+      
+      google.script.run
+        .withSuccessHandler(plan=>{
+          try {
+            const batches = (plan && plan.batches) || [];
+            if (!batches.length) {
+              stopLogPolling();
+              logLine('No data rows found.','err');
+              disableAll(false);
+              return;
+            }
+            let idx = 0;
+            const runNext = () => {
+              if (idx >= batches.length) {
+                stopLogPolling();
+                logLine('Full Blown Hoppification complete ✓','ok');
+                disableAll(false);
+                return;
+              }
+              const b = batches[idx++];
+              logLine(`Batch ${idx}/${batches.length}: rows ${b.start}–${b.end}…`,'run');
+              google.script.run
+                .withSuccessHandler(res=>{
+                  try {
+                    logLine(`Batch ${idx} ✓ (ok=${res.ok||0}, errors=${res.errors||0}, total=${res.total||0})`,'ok');
+                  } catch (e) {
+                    console.error('Error logging batch:', e);
+                  }
+                  runNext();
+                })
+                .withFailureHandler(err=>{
+                  try {
+                    logLine(`Batch ${idx} failed: ${err && err.message ? err.message : err}`,'err');
+                  } catch (e) {
+                    console.error('Error logging batch failure:', e);
+                  }
+                  runNext();
+                })
+                .runPipelineBatch(b.start, b.end);
+            };
+            runNext();
+          } catch (e) {
+            console.error('Error in hoppify handler:', e);
+            stopLogPolling();
+            disableAll(false);
+          }
+        })
+        .withFailureHandler(err=>{
+          try {
+            stopLogPolling();
+            logLine(`Planning failed: ${err && err.message ? err.message : err}`,'err');
+          } catch (e) {
+            console.error('Error in failure handler:', e);
+          } finally {
+            disableAll(false);
+          }
+        })
+        .getBatchPlan(batchSize);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initMonthPicker();
+      loadAvailableBlogs();
+      logLine('Graceful sidebar loaded ✓', 'ok');
+      
+      // Reload blogs when active cell changes
+      setInterval(loadAvailableBlogs, 5000);
+    });
+  </script>
+</body>
+</html>
