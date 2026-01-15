@@ -57,6 +57,165 @@ const DEFAULT_OUTPUT_FOLDER_ID = '1yBMpsPZwqAtZtjMwrATGfLnYPBW1kKbB';
 const OUTPUT_AS_DOC_CODEBLOCK = true;
 const TOPIC_DEDUP_LOOKBACK_DAYS = 120; 
 
+/** ===== CONFIGURATION HELPERS ===== */
+
+/**
+ * Get a configuration value from Script Properties with fallback to default.
+ * @param {string} key - The property key
+ * @param {*} defaultValue - The default value if property is not set
+ * @return {*} The property value or default
+ */
+function getConfigValue_(key, defaultValue) {
+  const value = PropertiesService.getScriptProperties().getProperty(key);
+  return value !== null ? value : defaultValue;
+}
+
+/**
+ * Get the sheet name from Script Properties or use default.
+ * @return {string} The sheet name
+ */
+function getSheetName_() {
+  return getConfigValue_('sheet_name', SHEET_NAME);
+}
+
+/**
+ * Get the output folder ID from Script Properties or use default.
+ * @return {string} The folder ID
+ */
+function getOutputFolderId_() {
+  return getConfigValue_('output_folder_id', DEFAULT_OUTPUT_FOLDER_ID);
+}
+
+/**
+ * Get the topic deduplication lookback days from Script Properties or use default.
+ * @return {number} The lookback days
+ */
+function getTopicDedupLookbackDays_() {
+  return Number(getConfigValue_('topic_dedup_lookback_days', TOPIC_DEDUP_LOOKBACK_DAYS));
+}
+
+/**
+ * Initialize the "Prompts" sheet with default prompts if it doesn't exist.
+ * Creates the sheet and populates it with hardcoded defaults.
+ * @return {Object} Status object
+ */
+function initializePromptsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Prompts');
+  
+  if (sheet) {
+    return { status: 'exists', message: 'Prompts sheet already exists' };
+  }
+  
+  // Create the sheet
+  sheet = ss.insertSheet('Prompts');
+  
+  // Set up headers
+  sheet.appendRow(['Prompt Name', 'Prompt Text']);
+  sheet.getRange(1, 1, 1, 2).setFontWeight('bold').setBackground('#E5E6E5');
+  sheet.setFrozenRows(1);
+  sheet.setColumnWidth(1, 250);
+  sheet.setColumnWidth(2, 600);
+  
+  // Add default prompts
+  const defaultPrompts = [
+    ['OVERALL_INSTRUCTIONS', [
+      'Use medically accurate, plain-language explanations.',
+      'Favor short paragraphs (≤ 3 sentences) and scannable bullets.',
+      'CRITICAL: Final word count MUST be 1000-1200 words. This is not negotiable.',
+      'Work primary keyword into the first sentence of the introduction.',
+      'Use primary/secondary keywords naturally in H2/H3s. Every <h2> & <h3> should have copy after it.',
+      'Include at least one bulleted or numbered list.',
+      'Include 3-5 specific citations from authoritative medical sources (NIH, CDC, Mayo, Cleveland).',
+      'Final H2 should include the primary keyword.',
+      'Close with a clear CTA displaying the phone number and mentioning "online form".'
+    ].join('\n')],
+    ['TOPIC_GENERATION_SYSTEM', `You are a blog topic generator.
+Task: Create EXACTLY {n} distinct blog topics based on these keywords.
+Output Requirement: Return a raw JSON Array of objects.
+JSON Format: [{"primary": "Main Keyword", "secondaries": ["Sub Keyword"], "title": "The Title"}]`],
+    ['OUTLINE_GENERATION', `Create detailed outline. 1000+ words target. H2/H3 structure.
+Must start with "In short" list.
+CTA: {phone} + "online appointment request form".
+Return HTML only.`],
+    ['DRAFT_EXPANSION', `Expand outline to 1000-1200 words. Keep "In short". Add citations. CTA: {phone}. Return HTML only.`],
+    ['COPYEDIT', `Polish content. 1000-1200 words. Verify citations. CTA: {phone}. Return HTML.`],
+    ['WORD_ADJUSTMENT', `{intent} content to {minWords}-{maxWords} words. Return HTML.`]
+  ];
+  
+  sheet.getRange(2, 1, defaultPrompts.length, 2).setValues(defaultPrompts);
+  
+  return { status: 'created', message: 'Prompts sheet created successfully with default prompts' };
+}
+
+/**
+ * Get a prompt from the "Prompts" sheet with caching and fallback to defaults.
+ * @param {string} promptName - The name of the prompt to retrieve
+ * @return {string} The prompt text
+ */
+function getPrompt_(promptName) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'prompt_' + promptName;
+  
+  // Try cache first
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+  
+  // Try to read from sheet
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Prompts');
+    
+    if (sheet && sheet.getLastRow() > 1) {
+      const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+      
+      for (let i = 0; i < data.length; i++) {
+        if (String(data[i][0]).trim() === promptName) {
+          const promptText = String(data[i][1]);
+          // Cache for 1 hour
+          cache.put(cacheKey, promptText, 3600);
+          return promptText;
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log('Error reading Prompts sheet: ' + e);
+  }
+  
+  // Fallback to hardcoded defaults
+  const defaults = {
+    'OVERALL_INSTRUCTIONS': [
+      'Use medically accurate, plain-language explanations.',
+      'Favor short paragraphs (≤ 3 sentences) and scannable bullets.',
+      'CRITICAL: Final word count MUST be 1000-1200 words. This is not negotiable.',
+      'Work primary keyword into the first sentence of the introduction.',
+      'Use primary/secondary keywords naturally in H2/H3s. Every <h2> & <h3> should have copy after it.',
+      'Include at least one bulleted or numbered list.',
+      'Include 3-5 specific citations from authoritative medical sources (NIH, CDC, Mayo, Cleveland).',
+      'Final H2 should include the primary keyword.',
+      'Close with a clear CTA displaying the phone number and mentioning "online form".'
+    ].join('\n'),
+    'TOPIC_GENERATION_SYSTEM': `You are a blog topic generator.
+Task: Create EXACTLY {n} distinct blog topics based on these keywords.
+Output Requirement: Return a raw JSON Array of objects.
+JSON Format: [{"primary": "Main Keyword", "secondaries": ["Sub Keyword"], "title": "The Title"}]`,
+    'OUTLINE_GENERATION': `Create detailed outline. 1000+ words target. H2/H3 structure.
+Must start with "In short" list.
+CTA: {phone} + "online appointment request form".
+Return HTML only.`,
+    'DRAFT_EXPANSION': `Expand outline to 1000-1200 words. Keep "In short". Add citations. CTA: {phone}. Return HTML only.`,
+    'COPYEDIT': `Polish content. 1000-1200 words. Verify citations. CTA: {phone}. Return HTML.`,
+    'WORD_ADJUSTMENT': `{intent} content to {minWords}-{maxWords} words. Return HTML.`
+  };
+  
+  const defaultPrompt = defaults[promptName] || '';
+  if (defaultPrompt) {
+    cache.put(cacheKey, defaultPrompt, 3600);
+  }
+  
+  return defaultPrompt;
+}
+
 /** ===== MENU & TRIGGERS ===== */
 function onOpen(e) {
   const ui = SpreadsheetApp.getUi();
@@ -149,13 +308,60 @@ function runPipelineBatch(startRow, endRow) {
   return summarize_(items);
 }
 
+/**
+ * Fetch worst keywords from AgencyAnalytics and generate topics for all data rows.
+ * Called from the sidebar.
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function getKeywordsAndTopicsAllRows()      { return eachDataRow_(processKeywordsAndTopicsRow_); }
+
+/**
+ * Fetch worst keywords from AgencyAnalytics and generate topics for selected rows.
+ * Called from the sidebar.
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function getKeywordsAndTopicsSelectedRows() { return eachSelectedRow_(processKeywordsAndTopicsRow_); }
+
+/**
+ * Generate HTML outlines for all data rows and save to Google Docs.
+ * Called from the sidebar.
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function generateOutlinesAllRows()          { return eachDataRow_((r)=>generateOutlinesForRow_(r, {})); }
+
+/**
+ * Generate HTML outlines for selected rows and save to Google Docs.
+ * Called from the sidebar.
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function generateOutlinesSelectedRows()     { return eachSelectedRow_((r)=>generateOutlinesForRow_(r, {})); }
+
+/**
+ * Expand outlines into full drafts (1000-1200 words) for all data rows.
+ * Called from the sidebar.
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function fillDraftsAllRows()                { return eachDataRow_((r)=>fillDraftsForRow_(r, {})); }
+
+/**
+ * Expand outlines into full drafts (1000-1200 words) for selected rows.
+ * Called from the sidebar.
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function fillDraftsSelectedRows()           { return eachSelectedRow_((r)=>fillDraftsForRow_(r, {})); }
+
+/**
+ * Perform final copyediting and polish for all data rows.
+ * Called from the sidebar.
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function copyeditAllRows()                  { return eachDataRow_((r)=>copyeditForRow_(r, {})); }
+
+/**
+ * Perform final copyediting and polish for selected rows.
+ * Called from the sidebar.
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function copyeditSelectedRows()             { return eachSelectedRow_((r)=>copyeditForRow_(r, {})); }
 
 function setSelectedMonth(yyyyMm) {
@@ -165,6 +371,12 @@ function setSelectedMonth(yyyyMm) {
 }
 
 /** ===== MAIN ACTION ===== */
+
+/**
+ * One-click blog generation for the active row. Generates outlines, expands to drafts,
+ * performs copyediting, and audits word counts. Called from the sidebar.
+ * @return {Object} Result object with status, steps completed, word count summary, and logs
+ */
 function hoppywriteActiveRow() {
   clearSidebarLogs();
   const sh = getSheet_();
@@ -272,13 +484,27 @@ function auditWordCountsForRow_(row) {
   return { row, clientCode, results, inRange, total, percentage: total>0?((inRange/total)*100).toFixed(0):0 };
 }
 
+/**
+ * Send topics to Wrike as tasks for all data rows. Creates tasks via approval blueprints.
+ * Called from the sidebar.
+ * @param {string} yyyyMm - Target month in YYYY-MM format (e.g., "2025-10")
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function sendToWrikeAllRows(yyyyMm) { return eachDataRow_(r => _wrikeSendRow_(r, { month: _normalizeMonthArg_(yyyyMm) })); }
+
+/**
+ * Send topics to Wrike as tasks for selected rows. Creates tasks via approval blueprints.
+ * Called from the sidebar.
+ * @param {string} yyyyMm - Target month in YYYY-MM format (e.g., "2025-10")
+ * @return {Object} Summary with total, ok count, errors, and items array
+ */
 function sendToWrikeSelectedRows(yyyyMm) { return eachSelectedRow_(r => _wrikeSendRow_(r, { month: _normalizeMonthArg_(yyyyMm) })); }
 
 /** ===== BOOTSTRAP HELPERS ===== */
 function getSheet_() {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  if (!sh) throw new Error('Sheet not found: ' + SHEET_NAME);
+  const sheetName = getSheetName_();
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sh) throw new Error('Sheet not found: ' + sheetName);
   return sh;
 }
 function headerRows_() { return 2; }
@@ -330,7 +556,8 @@ function getGeminiConfig_() {
   const sp = PropertiesService.getScriptProperties();
   const apiKey = sp.getProperty('gemini_api_key');
   if (!apiKey) throw new Error('Missing gemini_api_key');
-  return { apiKey, model: sp.getProperty('gemini_model') || GEMINI_PREFERRED_MODELS[0] };
+  const defaultModel = getConfigValue_('gemini_default_model', GEMINI_PREFERRED_MODELS[0]);
+  return { apiKey, model: sp.getProperty('gemini_model') || defaultModel };
 }
 
 function geminiFetchText_(apiKey, model, body) {
@@ -347,11 +574,9 @@ function geminiFetchText_(apiKey, model, body) {
 function requestTopicsFromGemini_(keywords, n) {
   const { apiKey, model } = getGeminiConfig_();
   
-  // 1. Simpler Prompt: Ask for a standard Array
-  const sys = `You are a blog topic generator.
-Task: Create EXACTLY ${n} distinct blog topics based on these keywords.
-Output Requirement: Return a raw JSON Array of objects.
-JSON Format: [{"primary": "Main Keyword", "secondaries": ["Sub Keyword"], "title": "The Title"}]`;
+  // Get prompt template from Prompts sheet or use default
+  const sysTemplate = getPrompt_('TOPIC_GENERATION_SYSTEM');
+  const sys = sysTemplate.replace('{n}', n);
   
   const user = `KEYWORDS: ${keywords.join(', ')}`;
   const body = {
@@ -402,10 +627,8 @@ JSON Format: [{"primary": "Main Keyword", "secondaries": ["Sub Keyword"], "title
 /** ===== CONTENT GENERATION ===== */
 function requestOutlineHTMLFromGemini_(topic, clientSpec, editorName, ctaPhone, ctaLink, row) {
   const { apiKey, model } = getGeminiConfig_();
-  const sys = `Create detailed outline. 1000+ words target. H2/H3 structure.
-  Must start with "In short" list.
-  CTA: ${formatPhoneDisplay_(ctaPhone)} + "online appointment request form".
-  Return HTML only.`;
+  const sysTemplate = getPrompt_('OUTLINE_GENERATION');
+  const sys = sysTemplate.replace('{phone}', formatPhoneDisplay_(ctaPhone));
   const user = `Topic: ${topic.title}\nPrimary: ${topic.primary}\nInstructions: ${clientSpec}`;
   const body = { contents: [{ role: 'user', parts: [{ text: sys + '\n\n' + user }] }] };
   
@@ -418,7 +641,8 @@ function requestOutlineHTMLFromGemini_(topic, clientSpec, editorName, ctaPhone, 
 
 function requestDraftHTMLFromGemini_(outlineHTML, clientSpec, ctaPhone, ctaLink) {
   const { apiKey, model } = getGeminiConfig_();
-  const sys = `Expand outline to 1000-1200 words. Keep "In short". Add citations. CTA: ${formatPhoneDisplay_(ctaPhone)}. Return HTML only.`;
+  const sysTemplate = getPrompt_('DRAFT_EXPANSION');
+  const sys = sysTemplate.replace('{phone}', formatPhoneDisplay_(ctaPhone));
   const body = { contents: [{ role: 'user', parts: [{ text: sys + '\n\nOutline:\n' + outlineHTML }] }] };
   
   let html = geminiFetchText_(apiKey, model, body).trim();
@@ -432,7 +656,8 @@ function requestDraftHTMLFromGemini_(outlineHTML, clientSpec, ctaPhone, ctaLink)
 
 function requestCopyeditHTMLFromGemini_(draftHTML, ctaPhone, ctaLink) {
   const { apiKey, model } = getGeminiConfig_();
-  const sys = `Polish content. 1000-1200 words. Verify citations. CTA: ${formatPhoneDisplay_(ctaPhone)}. Return HTML.`;
+  const sysTemplate = getPrompt_('COPYEDIT');
+  const sys = sysTemplate.replace('{phone}', formatPhoneDisplay_(ctaPhone));
   const body = { contents: [{ role: 'user', parts: [{ text: sys + '\n\nHTML:\n' + draftHTML }] }] };
   
   let html = geminiFetchText_(apiKey, model, body).trim();
@@ -489,8 +714,13 @@ function ensureWordRangeOrExpand_(html, minWords, maxWords, apiKey, model) {
   for (let i=1; i<=2; i++) {
     if (count >= minWords && count <= maxWords) break;
     const intent = count < minWords ? 'expand' : 'compress';
+    const promptTemplate = getPrompt_('WORD_ADJUSTMENT');
+    const promptText = promptTemplate
+      .replace('{intent}', intent.toUpperCase())
+      .replace('{minWords}', minWords)
+      .replace('{maxWords}', maxWords);
     const body = {
-      contents: [{ role:'user', parts:[{ text: `${intent.toUpperCase()} content to ${minWords}-${maxWords} words. Return HTML.\n\n${out}` }] }],
+      contents: [{ role:'user', parts:[{ text: `${promptText}\n\n${out}` }] }],
       generationConfig: { temperature: intent==='expand'?0.4:0.2 }
     };
     try {
@@ -541,7 +771,7 @@ function processKeywordsAndTopicsRow_(row) {
   // A. From Live Site
   if (blogUrl) {
     try { 
-      const live = fetchRecentTitlesFromBlog_(blogUrl, TOPIC_DEDUP_LOOKBACK_DAYS); 
+      const live = fetchRecentTitlesFromBlog_(blogUrl, getTopicDedupLookbackDays_()); 
       avoidTitles = avoidTitles.concat(live);
     } catch (e) {}
   }
@@ -704,7 +934,7 @@ function copyeditForRow_(row, opts) {
     if (draftHtml.length < 100) continue;
     
     try {
-      const finalHtml = requestCopyeditHTMLFromGemini_(draftHtml, ctaPhone, ctaLink);
+      let finalHtml = requestCopyeditHTMLFromGemini_(draftHtml, ctaPhone, ctaLink);
       finalHtml = insertH1AfterInShort_(finalHtml, String(sh.getRange(row, blogCol_(i,'topic')).getValue()));
       writeDocWithCodeBlock_(linkMeta.fileId, `Final: ${String(sh.getRange(row, blogCol_(i,'topic')).getValue())} (${monthYear})`, finalHtml);
       edited++;
@@ -855,7 +1085,8 @@ function ensureDocForLinkCell_(sh, row, col, defaultName) {
   if (meta.fileId) return meta;
   const doc = DocumentApp.create(sanitizeFilename_(defaultName));
   const file = DriveApp.getFileById(doc.getId());
-  try { DriveApp.getFolderById(DEFAULT_OUTPUT_FOLDER_ID).addFile(file); DriveApp.getRootFolder().removeFile(file); } catch (_) {}
+  const folderId = getOutputFolderId_();
+  try { DriveApp.getFolderById(folderId).addFile(file); DriveApp.getRootFolder().removeFile(file); } catch (_) {}
   setHyperlinkCell_(sh, row, col, defaultName, doc.getUrl());
   return { url: doc.getUrl(), fileId: doc.getId() };
 }
@@ -1082,7 +1313,7 @@ function parseFeedItems_(xmlText, lookbackDays) {
     const doc = XmlService.parse(xmlText);
     const root = doc.getRootElement();
     const now = new Date();
-    const cutoff = new Date(now.getTime() - (lookbackDays || TOPIC_DEDUP_LOOKBACK_DAYS) * 86400000);
+    const cutoff = new Date(now.getTime() - (lookbackDays || getTopicDedupLookbackDays_()) * 86400000);
     const items = [];
     const name = root.getName().toLowerCase();
 
